@@ -45,11 +45,12 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 {
     BUDDY_INFO* target_node, *curr_node;
     void *first_node_start, *second_node_start;
-    if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))
+    
+    if (find_type == target_type)
     {
         return;
     }
-    if (find_type == target_type)
+    if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))
     {
         return;
     }
