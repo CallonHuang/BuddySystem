@@ -22,7 +22,7 @@ static void *start = NULL;
 int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
 {
     int i = 0;
-    if (buddy_type == BUDDY_TYPE_MAX)
+    if (!BUDDY_TYPE_VALID(buddy_type))
     {
         return -1;
     }    
@@ -34,12 +34,8 @@ int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
     printf("all of start is %p\n", start);
     for (i = 0; i < num; i++)
     {
-        BUDDY_INFO *elem = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));
-        if (NULL == elem)
-        {
-            return -1;
-        }
-        elem->start = (start+i*(BUDDY_BASE_SIZE<<buddy_type));
+        BUDDY_INFO* elem;
+        CREATE_BUDDY_NODE(elem, (start+i*(BUDDY_BASE_SIZE<<buddy_type)));
         ListAddTail(&free_area[buddy_type].list, (NODE *)elem);
     }
     return 0;
@@ -48,18 +44,20 @@ int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
 static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 {
     BUDDY_INFO* target_node, *curr_node;
-    void *start1, *start2;
+    void *first_node_start, *second_node_start;
+    if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))
+    {
+        return;
+    }
     if (find_type == target_type)
     {
         return;
     }
     target_node = (BUDDY_INFO *)free_area[find_type].list.node.next;
-    start1 = target_node->start;
-    start2 = (start1+(BUDDY_BASE_SIZE<<(find_type-1)));
-    ListDelete(&free_area[find_type].list, (NODE *)target_node);
-    free(target_node);
-    target_node = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));
-    target_node->start = start1;
+    first_node_start = target_node->start;
+    second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(find_type-1)));
+    LIST_FREE_NODE(&free_area[find_type].list, target_node);
+    CREATE_BUDDY_NODE(target_node, first_node_start);
     curr_node = (BUDDY_INFO *)free_area[find_type-1].list.node.next;
     if (free_area[find_type-1].list.count > 0)
     {
@@ -73,8 +71,7 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
         }
     }
     ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
-    target_node = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));
-    target_node->start = start2;
+    CREATE_BUDDY_NODE(target_node, second_node_start);
     ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
     SplitNode(target_type, find_type-1);
 }
@@ -83,18 +80,20 @@ static int MergeNode(BUDDY_TYPE target_type,
     BUDDY_INFO *front, 
     BUDDY_INFO *behind)
 {
+    if (!BUDDY_TYPE_VALID(target_type))
+    {
+        return -1;
+    } 
     if ((front->start + (BUDDY_BASE_SIZE<<target_type) != behind->start)
         || ((unsigned long)(front->start - start) % (BUDDY_BASE_SIZE<<(target_type+1)) != 0))
     {
         printf("Merge failed: front->start[%p] behind->start[%p]\n", front->start, behind->start);      
         return -1;
     }
-    BUDDY_INFO* target_node = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));
+    BUDDY_INFO* target_node;
     BUDDY_INFO* cur_node = NULL;
-    target_node->start = front->start;
-    for (cur_node = (BUDDY_INFO*)free_area[target_type+1].list.node.next; 
-        cur_node != (BUDDY_INFO*)&free_area[target_type+1].list.node; 
-        cur_node = (BUDDY_INFO*)cur_node->list.node.next)
+    CREATE_BUDDY_NODE(target_node, front->start);
+    LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[target_type+1].list)
     {
         if (cur_node->start > target_node->start)
         {
@@ -102,10 +101,9 @@ static int MergeNode(BUDDY_TYPE target_type,
         }
     }
     ListInsert(&free_area[target_type+1].list, (NODE *)target_node, (NODE *)cur_node);
-    ListDelete(&free_area[target_type].list, (NODE *)front);
-    free(front);
-    ListDelete(&free_area[target_type].list, (NODE *)behind);
-    free(behind);
+
+    LIST_FREE_NODE(&free_area[target_type].list, front);
+    LIST_FREE_NODE(&free_area[target_type].list, behind);
     return 0;
 }
 
@@ -113,12 +111,15 @@ int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr)
 {
     int i = 0;
     BUDDY_INFO* target_node;
+    if (!BUDDY_TYPE_VALID(buddy_type))
+    {
+        return -1;
+    } 
     if (free_area[buddy_type].list.count != 0)
     {
         target_node = (BUDDY_INFO *)free_area[buddy_type].list.node.next;
 		*viraddr = target_node->start;
-        ListDelete(&free_area[buddy_type].list, (NODE *)target_node);
-        free(target_node);
+        LIST_FREE_NODE(&free_area[buddy_type].list, target_node);
     }
     else
     {
@@ -146,11 +147,14 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
 {
     int i = 0, bMerged = 0;
     BUDDY_INFO* cur_node = NULL;
-    BUDDY_INFO* target_node = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));
-    target_node->start = viraddr;
-    for (cur_node = (BUDDY_INFO*)free_area[buddy_type].list.node.next; 
-        cur_node != (BUDDY_INFO*)&free_area[buddy_type].list.node; 
-        cur_node = (BUDDY_INFO*)cur_node->list.node.next)
+    BUDDY_INFO* target_node;
+    if (!BUDDY_TYPE_VALID(buddy_type))
+    {
+        return;
+    }
+
+    CREATE_BUDDY_NODE(target_node, viraddr);
+    LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[buddy_type].list)
     {
         if (cur_node->start > viraddr)
         {
@@ -162,9 +166,7 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
     {	
         if (free_area[i].list.count > 1)
         {
-            for (cur_node = (BUDDY_INFO*)free_area[i].list.node.next; 
-                cur_node->list.node.next != &free_area[i].list.node; 
-                cur_node = (BUDDY_INFO*)cur_node->list.node.next)
+            LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[i].list)
             {
                 if (MergeNode(i, cur_node, (BUDDY_INFO*)cur_node->list.node.next) == 0)
                 {
@@ -201,9 +203,7 @@ void BuddyPrt()
         {
             printf("|%d| ", i);
             BUDDY_INFO* target_node;
-            for (target_node = (BUDDY_INFO*)free_area[i].list.node.next; 
-                target_node != (BUDDY_INFO*)&free_area[i].list.node; 
-                target_node = (BUDDY_INFO*)target_node->list.node.next)
+            LIST_FOR_EACH(BUDDY_INFO, target_node, free_area[i].list)
             {
                 printf("|start: %p|", target_node->start);
             }

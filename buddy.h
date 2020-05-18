@@ -25,6 +25,16 @@ typedef enum
     BUDDY_TYPE_MAX
 } BUDDY_TYPE;
 
+#define CREATE_BUDDY_NODE(node, data) do{                                                \
+                                        node = (BUDDY_INFO *)malloc (sizeof(BUDDY_INFO));\
+                                        node->start = data;                              \
+                                    }while(0)
+
+#define BUDDY_TYPE_VALID(type)     ({   \
+                                        int bValid = (type >= BUDDY_TYPE_1M && type < BUDDY_TYPE_MAX);  \
+                                        (bValid);                                                       \
+                                    })
+
 int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size));
 int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr);
 void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr);
