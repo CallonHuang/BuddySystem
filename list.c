@@ -35,10 +35,9 @@ void ListDelete(LIST *list, NODE *node)
 void ListDestroy(LIST *list)
 {
     NODE *node;
-    for (node = LIST_HEAD.next; list->count > 0; node = LIST_HEAD.next)
+    for (node = LIST_HEAD.next; node != &LIST_HEAD; node = LIST_HEAD.next)
     {
-        ListDelete(list, node);
-        free(node);
+        LIST_FREE_NODE(list, node);
     }
     
 }
