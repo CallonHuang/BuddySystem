@@ -48,6 +48,7 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
     
     if (find_type == target_type)
     {
+        //recurse end
         return;
     }
     if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))
@@ -55,9 +56,12 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
         return;
     }
     target_node = (BUDDY_INFO *)free_area[find_type].list.node.next;
+    //before higher order decomposition, save the start address
     first_node_start = target_node->start;
     second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(find_type-1)));
     LIST_FREE_NODE(&free_area[find_type].list, target_node);
+
+    //must ensure in order to insert
     CREATE_BUDDY_NODE(target_node, first_node_start);
     curr_node = (BUDDY_INFO *)free_area[find_type-1].list.node.next;
     if (free_area[find_type-1].list.count > 0)
@@ -74,6 +78,8 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
     ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
     CREATE_BUDDY_NODE(target_node, second_node_start);
     ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
+    
+    //recurse
     SplitNode(target_type, find_type-1);
 }
 
@@ -92,6 +98,7 @@ static int MergeNode(BUDDY_TYPE target_type,
     }
     BUDDY_INFO* target_node;
     BUDDY_INFO* cur_node = NULL;
+    //must ensure in order to insert
     CREATE_BUDDY_NODE(target_node, front->start);
     LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[target_type+1].list)
     {
@@ -102,6 +109,7 @@ static int MergeNode(BUDDY_TYPE target_type,
     }
     ListInsert(&free_area[target_type+1].list, (NODE *)target_node, (NODE *)cur_node);
 
+    //release no used resources
     LIST_FREE_NODE(&free_area[target_type].list, front);
     LIST_FREE_NODE(&free_area[target_type].list, behind);
     return 0;
@@ -130,6 +138,7 @@ int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr)
                 break;
             }
         }
+        //find the higher order
         if (i != BUDDY_TYPE_MAX)
         {
             SplitNode(buddy_type, i);
@@ -152,7 +161,7 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
     {
         return;
     }
-
+    //must ensure in order to insert
     CREATE_BUDDY_NODE(target_node, viraddr);
     LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[buddy_type].list)
     {
@@ -162,6 +171,8 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
         }
     }
     ListInsert(&free_area[buddy_type].list, (NODE *)target_node, (NODE *)cur_node);
+
+    //traversal all the list to merge
     for (i = buddy_type; i < BUDDY_TYPE_MAX-1; )
     {	
         if (free_area[i].list.count > 1)
@@ -199,13 +210,17 @@ static void MovingToMerge
         return;
     }
     BUDDY_INFO *next_free = (BUDDY_INFO*)curr_free_node->list.node.next;
+    //make sure the data not lost 
     move(next_free->start, curr_used_node->start, (BUDDY_BASE_SIZE<<buddy_type));
-                        
+
+    //swap used node & free node               
     ListDelete(&free_area[buddy_type].list, (NODE *)next_free);
     ListInsert(&used_area[buddy_type].list, (NODE *)next_free, (NODE *)curr_used_node->list.node.next);
 
     ListDelete(&used_area[buddy_type].list, (NODE *)curr_used_node);
     ListInsert(&free_area[buddy_type].list, (NODE *)curr_used_node, (NODE *)curr_free_node->list.node.next);
+    
+    //merge in order
     if (curr_free_node->start > curr_used_node->start)
     {
         MergeNode(buddy_type, curr_used_node, curr_free_node);
@@ -228,16 +243,20 @@ static void BuddyIntegrate
     BUDDY_INFO* target_node;
     for (i = 0; i < BUDDY_TYPE_MAX; )
     {
+        //merge util one or zero
         if (free_area[i].list.count > 1)
         {
             BUDDY_INFO *front = (BUDDY_INFO*)free_area[i].list.node.next;
+            //test behind buddy
             behind.start = front->start + (BUDDY_BASE_SIZE<<i);
             if (!BUDDY_CAN_MERGE(start, front->start, behind.start, i))
             {
+                //use front buddy
                 behind.start = front->start - (BUDDY_BASE_SIZE<<i);
             }
             LIST_FOR_EACH(BUDDY_INFO, target_node, used_area[i].list)
             {
+                //find the buddy
                 if (target_node->start == behind.start)
                 {
                     MovingToMerge(i, front, used_area, target_node, move);
@@ -264,10 +283,14 @@ int BuddySmartAlloc(
     {
         return -1;
     }
+    
+    //try alloc
     if (BuddyAlloc(buddy_type, viraddr) != -1)
     {
         return 0;
     }
+
+    //count remain_size: enough or not?
     for (i = 0; i < BUDDY_TYPE_MAX; i++)
     {
         BUDDY_INFO* target_node;
@@ -281,6 +304,8 @@ int BuddySmartAlloc(
         printf("total is not enough\n");
         return -1;
     }
+
+    //merge disconnected node
     BuddyIntegrate(used_area, move);
 
     return BuddyAlloc(buddy_type, viraddr);
