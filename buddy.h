@@ -35,9 +35,16 @@ typedef enum
                                         (bValid);                                                       \
                                     })
 
+#define BUDDY_CAN_MERGE(base, front_start, behind_start, type)     ({                                                                               \
+                                        int bCanMerge = (front_start + (BUDDY_BASE_SIZE<<(type)) == behind_start)                      \
+                                                        && ((unsigned long)(front_start - base) % (BUDDY_BASE_SIZE<<(type+1)) == 0);   \
+                                        (bCanMerge);                                                                                   \
+                                    })
+
 int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size));
 int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr);
 void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr);
+int BuddySmartAlloc(BUDDY_TYPE buddy_type, void **viraddr, void *(*move)(void *dest, const void* src, size_t n), BUDDY_INFO used_area[BUDDY_TYPE_MAX]);
 void BuddyDestroy(void (*release)(void* ptr));
 void BuddyPrt(void);
 

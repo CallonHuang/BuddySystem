@@ -85,8 +85,7 @@ static int MergeNode(BUDDY_TYPE target_type,
     {
         return -1;
     } 
-    if ((front->start + (BUDDY_BASE_SIZE<<target_type) != behind->start)
-        || ((unsigned long)(front->start - start) % (BUDDY_BASE_SIZE<<(target_type+1)) != 0))
+    if (!BUDDY_CAN_MERGE(start, front->start, behind->start, target_type))
     {
         printf("Merge failed: front->start[%p] behind->start[%p]\n", front->start, behind->start);      
         return -1;
@@ -169,10 +168,13 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
         {
             LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[i].list)
             {
-                if (MergeNode(i, cur_node, (BUDDY_INFO*)cur_node->list.node.next) == 0)
+                if (cur_node->list.node.next != &free_area[i].list.node)
                 {
-                    bMerged = 1;
-                    break;
+                    if (MergeNode(i, cur_node, (BUDDY_INFO*)cur_node->list.node.next) == 0)
+                    {
+                        bMerged = 1;
+                        break;
+                    }
                 }
             }
         }
@@ -181,6 +183,107 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
         else
             bMerged = 0;
     }
+}
+
+static void MovingToMerge
+(
+    BUDDY_TYPE buddy_type, 
+    BUDDY_INFO *curr_free_node, 
+    BUDDY_INFO used_area[BUDDY_TYPE_MAX], 
+    BUDDY_INFO *curr_used_node,
+    void *(*move)(void *dest, const void* src, size_t n)
+)
+{
+    if (!BUDDY_TYPE_VALID(buddy_type))
+    {
+        return;
+    }
+    BUDDY_INFO *next_free = (BUDDY_INFO*)curr_free_node->list.node.next;
+    move(next_free->start, curr_used_node->start, (BUDDY_BASE_SIZE<<buddy_type));
+                        
+    ListDelete(&free_area[buddy_type].list, (NODE *)next_free);
+    ListInsert(&used_area[buddy_type].list, (NODE *)next_free, (NODE *)curr_used_node->list.node.next);
+
+    ListDelete(&used_area[buddy_type].list, (NODE *)curr_used_node);
+    ListInsert(&free_area[buddy_type].list, (NODE *)curr_used_node, (NODE *)curr_free_node->list.node.next);
+    if (curr_free_node->start > curr_used_node->start)
+    {
+        MergeNode(buddy_type, curr_used_node, curr_free_node);
+    }
+    else
+    {
+        MergeNode(buddy_type, curr_free_node, curr_used_node);
+    }
+    
+}
+
+static void BuddyIntegrate
+(
+    BUDDY_INFO used_area[BUDDY_TYPE_MAX], 
+    void *(*move)(void *dest, const void* src, size_t n)
+)
+{
+    BUDDY_INFO behind;
+    int i = 0;
+    BUDDY_INFO* target_node;
+    for (i = 0; i < BUDDY_TYPE_MAX; )
+    {
+        if (free_area[i].list.count > 1)
+        {
+            BUDDY_INFO *front = (BUDDY_INFO*)free_area[i].list.node.next;
+            behind.start = front->start + (BUDDY_BASE_SIZE<<i);
+            if (!BUDDY_CAN_MERGE(start, front->start, behind.start, i))
+            {
+                behind.start = front->start - (BUDDY_BASE_SIZE<<i);
+            }
+            LIST_FOR_EACH(BUDDY_INFO, target_node, used_area[i].list)
+            {
+                if (target_node->start == behind.start)
+                {
+                    MovingToMerge(i, front, used_area, target_node, move);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            i++;
+        }
+    }
+}
+
+int BuddySmartAlloc(
+    BUDDY_TYPE buddy_type, 
+    void **viraddr, 
+    void *(*move)(void *dest, const void* src, size_t n), 
+    BUDDY_INFO used_area[BUDDY_TYPE_MAX]
+)
+{
+    int remain_size = 0, i = 0;
+    if (!BUDDY_TYPE_VALID(buddy_type))
+    {
+        return -1;
+    }
+    if (BuddyAlloc(buddy_type, viraddr) != -1)
+    {
+        return 0;
+    }
+    for (i = 0; i < BUDDY_TYPE_MAX; i++)
+    {
+        BUDDY_INFO* target_node;
+        LIST_FOR_EACH(BUDDY_INFO, target_node, free_area[i].list)
+        {
+            remain_size += (1<<i);
+        }
+    }
+    if (remain_size < (1<<buddy_type))
+    {
+        printf("total is not enough\n");
+        return -1;
+    }
+    BuddyIntegrate(used_area, move);
+
+    return BuddyAlloc(buddy_type, viraddr);
 }
 
 void BuddyDestroy(void (*release)(void* ptr))
