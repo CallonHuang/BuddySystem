@@ -43,7 +43,7 @@ int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
 
 static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 {
-    BUDDY_INFO* target_node, *curr_node;
+    BUDDY_INFO* target_node, *cur_node;
     void *first_node_start, *second_node_start;
     
     if (find_type == target_type)
@@ -63,21 +63,20 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 
     //must ensure in order to insert
     CREATE_BUDDY_NODE(target_node, first_node_start);
-    curr_node = (BUDDY_INFO *)free_area[find_type-1].list.node.next;
+    cur_node = (BUDDY_INFO *)free_area[find_type-1].list.node.next;
     if (free_area[find_type-1].list.count > 0)
     {
-        for (; curr_node != (BUDDY_INFO *)&free_area[find_type-1].list.node; 
-            curr_node = (BUDDY_INFO *)curr_node->list.node.next)
+        LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[find_type-1].list)
         {
-            if (curr_node->start > target_node->start)
+            if (cur_node->start > target_node->start)
             {
                 break;
             }
         }
     }
-    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
+    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)cur_node);
     CREATE_BUDDY_NODE(target_node, second_node_start);
-    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
+    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)cur_node);
     
     //recurse
     SplitNode(target_type, find_type-1);
