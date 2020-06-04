@@ -165,33 +165,27 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
     LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[buddy_type].list)
     {
         if (cur_node->start > viraddr)
-        {
             break;
-        }
     }
     ListInsert(&free_area[buddy_type].list, (NODE *)target_node, (NODE *)cur_node);
-
     //traversal all the list to merge
     for (i = buddy_type; i < BUDDY_TYPE_MAX-1; )
     {	
+        bMerged = 0;
         if (free_area[i].list.count > 1)
         {
             LIST_FOR_EACH(BUDDY_INFO, cur_node, free_area[i].list)
             {
-                if (cur_node->list.node.next != &free_area[i].list.node)
+                if ((cur_node->list.node.next != &free_area[i].list.node) 
+                    && (MergeNode(i, cur_node, (BUDDY_INFO*)cur_node->list.node.next) == 0))
                 {
-                    if (MergeNode(i, cur_node, (BUDDY_INFO*)cur_node->list.node.next) == 0)
-                    {
-                        bMerged = 1;
-                        break;
-                    }
+                    bMerged = 1;
+                    break;
                 }
             }
         }
         if (!bMerged)
             i++;
-        else
-            bMerged = 0;
     }
 }
 
