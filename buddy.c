@@ -31,7 +31,6 @@ int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
     {
         ListInit(&free_area[i].list);
     }
-    printf("all of start is %p\n", start);
     for (i = 0; i < num; i++)
     {
         BUDDY_INFO* elem;
@@ -92,7 +91,8 @@ static int MergeNode(BUDDY_TYPE target_type,
     } 
     if (!BUDDY_CAN_MERGE(start, front->start, behind->start, target_type))
     {
-        printf("Merge failed: front->start[%p] behind->start[%p]\n", front->start, behind->start);      
+        printf("Merge failed: target_type[%d] front->start[%p] behind->start[%p]\n", 
+            target_type, front->start, behind->start);      
         return -1;
     }
     BUDDY_INFO* target_node;
@@ -300,7 +300,6 @@ int BuddySmartAlloc(
     }
     if (remain_size < (1<<buddy_type))
     {
-        printf("total is not enough\n");
         return -1;
     }
 
