@@ -17,55 +17,55 @@ free_area:
    |5|32M|->list
 */
 static BUDDY_INFO free_area[BUDDY_TYPE_MAX] = {0};
-static void *startAddr = NULL;
+static void *mem_start = NULL;
 
 int BuddyInit(BUDDY_TYPE buddy_type, int num, void* (*alloc)(size_t size))
 {
     int i = 0;
-    BUDDY_INFO* newElem = NULL;
+    BUDDY_INFO* new_node = NULL;
     if (!BUDDY_TYPE_VALID(buddy_type))  return -1;    
-    startAddr = alloc((BUDDY_BASE_SIZE<<buddy_type)*num);
+    mem_start = alloc((BUDDY_BASE_SIZE<<buddy_type)*num);
     for (i = 0; i < BUDDY_TYPE_MAX; i++) {
         ListInit(&free_area[i].list);
     }
     for (i = 0; i < num; i++) {
-        CREATE_BUDDY_NODE(newElem, (startAddr+i*(BUDDY_BASE_SIZE<<buddy_type)));
-        ListAddTail(&free_area[buddy_type].list, (NODE *)newElem);
+        CREATE_BUDDY_NODE(new_node, (mem_start+i*(BUDDY_BASE_SIZE<<buddy_type)));
+        ListAddTail(&free_area[buddy_type].list, (NODE *)new_node);
     }
     return 0;
 }
 
 static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 {
-    BUDDY_INFO* target_node = NULL, *curr_node = NULL, *newElem = NULL;
+    BUDDY_INFO* target_node = NULL, *curr_node = NULL, *new_node = NULL;
     void *first_node_start = NULL, *second_node_start = NULL;
-    BUDDY_TYPE tmp_type = find_type;
+    int i = find_type;
     
     if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))  return;
 
     do {
-        target_node = (BUDDY_INFO *)free_area[tmp_type].list.node.next;
+        target_node = (BUDDY_INFO *)free_area[i].list.node.next;
 
         //before higher order decomposition, save the start address
         first_node_start = target_node->start;
-        second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(tmp_type-1)));
-        LIST_FREE_NODE(&free_area[tmp_type].list, target_node);
+        second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(i-1)));
+        LIST_FREE_NODE(&free_area[i].list, target_node);
 
         //must ensure in order to insert
-        CREATE_BUDDY_NODE(newElem, first_node_start);
-        curr_node = (BUDDY_INFO *)free_area[tmp_type-1].list.node.next;
-        if (free_area[tmp_type-1].list.count > 0) {
-            LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[tmp_type-1].list) {
+        CREATE_BUDDY_NODE(new_node, first_node_start);
+        curr_node = (BUDDY_INFO *)free_area[i-1].list.node.next;
+        if (free_area[i-1].list.count > 0) {
+            LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[i-1].list) {
                 if (curr_node->start > target_node->start) {
                     break;
                 }
             }
         }
-        ListInsert(&free_area[tmp_type-1].list, (NODE *)newElem, (NODE *)curr_node);
-        CREATE_BUDDY_NODE(newElem, second_node_start);
-        ListInsert(&free_area[tmp_type-1].list, (NODE *)newElem, (NODE *)curr_node);
-        tmp_type -= 1;
-    } while (tmp_type != target_type);
+        ListInsert(&free_area[i-1].list, (NODE *)new_node, (NODE *)curr_node);
+        CREATE_BUDDY_NODE(new_node, second_node_start);
+        ListInsert(&free_area[i-1].list, (NODE *)new_node, (NODE *)curr_node);
+        i -= 1;
+    } while (i != target_type);
 }
 
 static int MergeNode(BUDDY_TYPE target_type, 
@@ -73,22 +73,22 @@ static int MergeNode(BUDDY_TYPE target_type,
     BUDDY_INFO *behind)
 {
     if (!BUDDY_TYPE_VALID(target_type))  return -1;
-    if (!BUDDY_CAN_MERGE(startAddr, front->start, behind->start, target_type)) {
+    if (!BUDDY_CAN_MERGE(mem_start, front->start, behind->start, target_type)) {
         printf("Merge failed: target_type[%d] front->start[%p] behind->start[%p]\n", 
             target_type, front->start, behind->start);      
         return -1;
     }
-    BUDDY_INFO* newElem = NULL;
+    BUDDY_INFO* new_node = NULL;
     BUDDY_INFO* curr_node = NULL;
 
     //must ensure in order to insert
-    CREATE_BUDDY_NODE(newElem, front->start);
+    CREATE_BUDDY_NODE(new_node, front->start);
     LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[target_type+1].list) {
-        if (curr_node->start > newElem->start) {
+        if (curr_node->start > new_node->start) {
             break;
         }
     }
-    ListInsert(&free_area[target_type+1].list, (NODE *)newElem, (NODE *)curr_node);
+    ListInsert(&free_area[target_type+1].list, (NODE *)new_node, (NODE *)curr_node);
 
     //release no used resources
     LIST_FREE_NODE(&free_area[target_type].list, front);
@@ -128,17 +128,17 @@ void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
 {
     int i = 0, bMerged = 0;
     BUDDY_INFO* curr_node = NULL;
-    BUDDY_INFO* newElem;
+    BUDDY_INFO* new_node;
     if (!BUDDY_TYPE_VALID(buddy_type))  return;
 
     //must ensure in order to insert
-    CREATE_BUDDY_NODE(newElem, viraddr);
+    CREATE_BUDDY_NODE(new_node, viraddr);
     LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[buddy_type].list) {
         if (curr_node->start > viraddr) {
             break;
         }
     }
-    ListInsert(&free_area[buddy_type].list, (NODE *)newElem, (NODE *)curr_node);
+    ListInsert(&free_area[buddy_type].list, (NODE *)new_node, (NODE *)curr_node);
 
     //traversal all the list to merge
     for (i = buddy_type; i < BUDDY_TYPE_MAX-1; ) {	
@@ -207,7 +207,7 @@ static void BuddyIntegrate
             behind_buddy.start = curr_free_node->start + (BUDDY_BASE_SIZE<<i);
 
             //front is buddy if behind cannot merge
-            if (!BUDDY_CAN_MERGE(startAddr, curr_free_node->start, behind_buddy.start, i)) {
+            if (!BUDDY_CAN_MERGE(mem_start, curr_free_node->start, behind_buddy.start, i)) {
                 behind_buddy.start = curr_free_node->start - (BUDDY_BASE_SIZE<<i);
             }
 
@@ -261,8 +261,8 @@ void BuddyDestroy(void (*release)(void* ptr))
     for (i = 0; i < BUDDY_TYPE_MAX; i++) {
         ListDestroy(&free_area[i].list);
     }
-    release(startAddr);
-    startAddr = NULL;
+    release(mem_start);
+    mem_start = NULL;
 }
 
 void BuddyPrt()
