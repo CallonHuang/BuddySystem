@@ -14,8 +14,8 @@ typedef struct
     int count;
 }LIST;
 
-#define LIST_FOR_EACH(TYPE, cur, list_struct)  \
-for (cur = (TYPE *)list_struct.node.next; cur != (TYPE *)&list_struct.node; cur = (TYPE *)cur->list.node.next)
+#define LIST_FOR_EACH(TYPE, curr, list_struct)  \
+for (curr = (TYPE *)list_struct.node.next; curr != (TYPE *)&list_struct.node; curr = (TYPE *)curr->list.node.next)
 
 #define LIST_FREE_NODE(list, node) do{                                  \
                                         ListDelete(list, (NODE *)node);\

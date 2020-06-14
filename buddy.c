@@ -39,34 +39,33 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
 {
     BUDDY_INFO* target_node, *curr_node;
     void *first_node_start, *second_node_start;
-    
-    //recurse end
-    if (find_type == target_type)  return;
+    BUDDY_TYPE tmp_type = find_type;
     
     if (!BUDDY_TYPE_VALID(target_type) || !BUDDY_TYPE_VALID(find_type))  return;
-    target_node = (BUDDY_INFO *)free_area[find_type].list.node.next;
 
-    //before higher order decomposition, save the start address
-    first_node_start = target_node->start;
-    second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(find_type-1)));
-    LIST_FREE_NODE(&free_area[find_type].list, target_node);
+    do {
+        target_node = (BUDDY_INFO *)free_area[tmp_type].list.node.next;
 
-    //must ensure in order to insert
-    CREATE_BUDDY_NODE(target_node, first_node_start);
-    curr_node = (BUDDY_INFO *)free_area[find_type-1].list.node.next;
-    if (free_area[find_type-1].list.count > 0) {
-        LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[find_type-1].list) {
-            if (curr_node->start > target_node->start) {
-                break;
+        //before higher order decomposition, save the start address
+        first_node_start = target_node->start;
+        second_node_start = (first_node_start+(BUDDY_BASE_SIZE<<(tmp_type-1)));
+        LIST_FREE_NODE(&free_area[tmp_type].list, target_node);
+
+        //must ensure in order to insert
+        CREATE_BUDDY_NODE(target_node, first_node_start);
+        curr_node = (BUDDY_INFO *)free_area[tmp_type-1].list.node.next;
+        if (free_area[tmp_type-1].list.count > 0) {
+            LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[tmp_type-1].list) {
+                if (curr_node->start > target_node->start) {
+                    break;
+                }
             }
         }
-    }
-    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
-    CREATE_BUDDY_NODE(target_node, second_node_start);
-    ListInsert(&free_area[find_type-1].list, (NODE *)target_node, (NODE *)curr_node);
-    
-    //recurse
-    SplitNode(target_type, find_type-1);
+        ListInsert(&free_area[tmp_type-1].list, (NODE *)target_node, (NODE *)curr_node);
+        CREATE_BUDDY_NODE(target_node, second_node_start);
+        ListInsert(&free_area[tmp_type-1].list, (NODE *)target_node, (NODE *)curr_node);
+        tmp_type -= 1;
+    } while (tmp_type != target_type);
 }
 
 static int MergeNode(BUDDY_TYPE target_type, 
@@ -102,26 +101,27 @@ int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr)
     int i = 0;
     BUDDY_INFO* target_node;
     if (!BUDDY_TYPE_VALID(buddy_type))  return -1;
-    if (free_area[buddy_type].list.count != 0) {
-        target_node = (BUDDY_INFO *)free_area[buddy_type].list.node.next;
-		*viraddr = target_node->start;
-        LIST_FREE_NODE(&free_area[buddy_type].list, target_node);
-    } else {
+    if (free_area[buddy_type].list.count == 0) {
+
+        //find the higher order
         for (i = buddy_type; i < BUDDY_TYPE_MAX; i++) {
             if (free_area[i].list.count != 0) {
                 break;
             }
         }
-
-        //find the higher order
-        if (i != BUDDY_TYPE_MAX) {
-            SplitNode(buddy_type, i);
-            return BuddyAlloc(buddy_type, viraddr);
-        } else {
+        if (i == BUDDY_TYPE_MAX) {
             return -1;
         }
+        SplitNode(buddy_type, i);
     }
-    return 0;
+
+    if (free_area[buddy_type].list.count != 0) {
+        target_node = (BUDDY_INFO *)free_area[buddy_type].list.node.next;
+		*viraddr = target_node->start;
+        LIST_FREE_NODE(&free_area[buddy_type].list, target_node);
+        return 0;
+    }
+    return -1;
 }
 
 void BuddyRecycle(BUDDY_TYPE buddy_type, void *viraddr)
