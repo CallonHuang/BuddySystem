@@ -117,7 +117,7 @@ int BuddyAlloc(BUDDY_TYPE buddy_type, void **viraddr)
 
     if (free_area[buddy_type].list.count != 0) {
         target_node = (BUDDY_INFO *)free_area[buddy_type].list.node.next;
-		*viraddr = target_node->start;
+        *viraddr = target_node->start;
         LIST_FREE_NODE(&free_area[buddy_type].list, target_node);
         return 0;
     }
