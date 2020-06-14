@@ -60,14 +60,11 @@ void UsedInfoPrint()
 {
     int i = 0;
     printf("+++++++++++++Now Used Buddy Info As Bellow+++++++++++++\n");
-    for (i = 0; i < BUDDY_TYPE_MAX; i++)
-    {
-        if (used_area[i].list.count != 0)
-        {
+    for (i = 0; i < BUDDY_TYPE_MAX; i++) {
+        if (used_area[i].list.count != 0) {
             printf("|%d| ", i);
             BUDDY_INFO* target_node;
-            LIST_FOR_EACH(BUDDY_INFO, target_node, used_area[i].list)
-            {
+            LIST_FOR_EACH(BUDDY_INFO, target_node, used_area[i].list) {
                 printf("|start: %p|", target_node->start);
             }
             printf("\n");
@@ -77,10 +74,7 @@ void UsedInfoPrint()
 
 void AllocRecord(BUDDY_TYPE type)
 {
-    if (!BUDDY_TYPE_VALID(type))
-    {
-        return;
-    }
+    if (!BUDDY_TYPE_VALID(type))  return;
     BUDDY_INFO* new_node;
     void *p = NULL;
     BuddyAlloc(type, &p);
@@ -91,29 +85,24 @@ void AllocRecord(BUDDY_TYPE type)
 
 void RecycleUsed(BUDDY_TYPE type, int index)
 {
-    if (!BUDDY_TYPE_VALID(type))
-    {
-        return;
-    }
-    BUDDY_INFO *cur_node = (BUDDY_INFO *)used_area[type].list.node.next;
+    if (!BUDDY_TYPE_VALID(type))  return;
+    BUDDY_INFO *curr_node = (BUDDY_INFO *)used_area[type].list.node.next;
     int i = 0;
-    for (i = 0; i < index; i++)
-    {
-        cur_node = (BUDDY_INFO *)cur_node->list.node.next;
+    for (i = 0; i < index; i++) {
+        curr_node = (BUDDY_INFO *)curr_node->list.node.next;
     }
-    BuddyRecycle(type, cur_node->start);
+    BuddyRecycle(type, curr_node->start);
     BuddyPrt();
-    LIST_FREE_NODE(&used_area[type].list, cur_node);
+    LIST_FREE_NODE(&used_area[type].list, curr_node);
 }
 
 void TestProgram2()
 {
     int i = 0;
-    BUDDY_INFO * new_node = NULL, *cur_node = NULL;
+    BUDDY_INFO * new_node = NULL, *curr_node = NULL;
     void *p;
     printf("++++++++++++++++++Test Smart Alloc+++++++++++++++++++\n");
-    for (i = 0; i < BUDDY_TYPE_MAX; i++)
-    {
+    for (i = 0; i < BUDDY_TYPE_MAX; i++) {
         ListInit(&used_area[i].list);
     }
     BuddyInit(BUDDY_TYPE_16M, 1, malloc);
@@ -158,18 +147,15 @@ void TestProgram2()
     BuddySmartAlloc(BUDDY_TYPE_4M, &p, memcpy, used_area);
     BuddyPrt();
     CREATE_BUDDY_NODE(new_node, p);
-    LIST_FOR_EACH(BUDDY_INFO, cur_node, used_area[BUDDY_TYPE_4M].list)
-    {
-        if (cur_node->start > new_node->start)
-        {
+    LIST_FOR_EACH(BUDDY_INFO, curr_node, used_area[BUDDY_TYPE_4M].list) {
+        if (curr_node->start > new_node->start) {
             break;
         }
     }
-    ListInsert(&used_area[BUDDY_TYPE_4M].list, (NODE *)new_node, (NODE *)cur_node);
+    ListInsert(&used_area[BUDDY_TYPE_4M].list, (NODE *)new_node, (NODE *)curr_node);
     UsedInfoPrint();
 
-    for (i = 0; i < BUDDY_TYPE_MAX; i++)
-    {
+    for (i = 0; i < BUDDY_TYPE_MAX; i++) {
         ListDestroy(&used_area[i].list);
     }
     BuddyDestroy(free);

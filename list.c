@@ -24,8 +24,7 @@ void ListAddTail(LIST *list, NODE *node)
 
 void ListDelete(LIST *list, NODE *node)
 {
-    if (list->count > 0 && node->prev != NULL && node->next != NULL)
-    {
+    if (list->count > 0 && node->prev != NULL && node->next != NULL) {
         node->prev->next = node->next;
         node->next->prev = node->prev;
         list->count--;
@@ -35,9 +34,7 @@ void ListDelete(LIST *list, NODE *node)
 void ListDestroy(LIST *list)
 {
     NODE *node;
-    for (node = LIST_HEAD.next; node != &LIST_HEAD; node = LIST_HEAD.next)
-    {
+    for (node = LIST_HEAD.next; node != &LIST_HEAD; node = LIST_HEAD.next) {
         LIST_FREE_NODE(list, node);
     }
-    
 }
