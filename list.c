@@ -1,7 +1,7 @@
 #include "list.h"
 
 #define LIST_HEAD list->node
-void ListInit(LIST* list)
+void ListInit(LIST *list)
 {
     LIST_HEAD.next = &LIST_HEAD;
     LIST_HEAD.prev = &LIST_HEAD;
