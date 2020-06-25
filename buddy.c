@@ -56,9 +56,8 @@ static void SplitNode(BUDDY_TYPE target_type, BUDDY_TYPE find_type)
         curr_node = (BUDDY_INFO *)free_area[i-1].list.node.next;
         if (free_area[i-1].list.count > 0) {
             LIST_FOR_EACH(BUDDY_INFO, curr_node, free_area[i-1].list) {
-                if (curr_node->start > target_node->start) {
+                if (curr_node->start > target_node->start)
                     break;
-                }
             }
         }
         ListInsert(&free_area[i-1].list, (NODE *)new_node, (NODE *)curr_node);
